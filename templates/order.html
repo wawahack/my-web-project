@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}ออเดอร์ {{ o.id }} · {{ shop }}{% endblock %}
+{% block body %}
+<h1 class="h1">ออเดอร์ #{{ o.id }} <span class="st st-{{ o.status }}">{{ status_th[o.status] }}</span></h1>
+{% set step = {'pending': 2, 'verifying': 3, 'paid': 4}.get(o.status, 0) %}
+{% if step %}<ol class="steps">
+  {% for n, t in [(1, 'สั่งซื้อ'), (2, 'ชำระเงิน'), (3, 'รออนุมัติ'), (4, 'ดาวน์โหลด')] %}<li class="{{ 'on' if n <= step }}">{{ t }}</li>{% endfor %}
+</ol>{% endif %}
+
+{% if o.status == 'paid' %}
+<section class="box stack">
+  <h2 class="h2" style="margin:0">ไฟล์ของคุณ</h2>
+  {% for it in items %}
+  <div>
+    <strong>{{ it.name }}</strong>
+    <div class="flist" style="margin-top:6px">
+      {% for f in files[it.id] %}
+      <div class="frow"><span class="ext">{{ (f.name.rsplit('.', 1)[-1] if '.' in f.name else 'file')[:5]|upper }}</span>
+        <span class="nm">{{ f.name }}</span><small>{{ f.size|fsize }}</small>
+        <a class="btn sm" href="/order/{{ o.id }}/file/{{ f.id }}?t={{ o.token }}" download>โหลด</a></div>
+      {% else %}<p class="note">สินค้านี้ไม่มีไฟล์แล้ว ติดต่อแอดมิน</p>{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  <a class="btn" style="text-align:center;text-decoration:none" href="/order/{{ o.id }}/zip?t={{ o.token }}">ดาวน์โหลดทั้งหมด (.zip)</a>
+  <p class="note">เก็บลิงก์หน้านี้ไว้โหลดซ้ำได้ ใครมีลิงก์นี้จะโหลดไฟล์ได้ อย่าส่งต่อให้คนอื่น</p>
+</section>
+{% else %}
+<div class="box">
+  <table>
+    <tr><th>สินค้า</th><th class="num">ราคา</th></tr>
+    {% for i in items %}<tr><td>{{ i.name }}</td><td class="num">{{ '{:,}'.format(i.price) }} บาท</td></tr>{% endfor %}
+  </table>
+  <div class="tot"><span>รวม</span><span>{{ '{:,}'.format(o.total) }} บาท</span></div>
+</div>
+{% endif %}
+
+{% if o.status in ('pending', 'verifying') %}
+<section class="box stack" id="pay" data-id="{{ o.id }}" data-t="{{ o.token }}" data-status="{{ o.status }}">
+  <h2 class="h2" style="margin:0">ชำระเงิน</h2>
+  <div class="payrow">
+    {% if qr %}
+      <img class="qr" src="/pay/qr?v={{ qr }}" alt="QR สำหรับโอนเงิน" width="240" height="240">
+    {% elif payload %}
+      <img id="qr" class="qr" alt="QR พร้อมเพย์ ยอด {{ o.total }} บาท" width="240" height="240" data-payload="{{ payload }}">
+    {% endif %}
+    <div class="acct">
+      <div class="amt"><small>ยอดที่ต้องโอน</small><strong>{{ '{:,}'.format(o.total) }} บาท</strong>
+        <button type="button" class="btn ghost sm copy" data-v="{{ o.total }}">คัดลอกยอด</button></div>
+      {% if pay.bank %}<div class="kv"><small>ธนาคาร / ช่องทาง</small><span>{{ pay.bank }}</span></div>{% endif %}
+      {% if pay.acc_no %}<div class="kv"><small>เลขบัญชี / เบอร์</small><span class="mono">{{ pay.acc_no }}</span>
+        <button type="button" class="btn ghost sm copy" data-v="{{ pay.acc_no }}">คัดลอก</button></div>{% endif %}
+      {% if pay.acc_name %}<div class="kv"><small>ชื่อบัญชี</small><span>{{ pay.acc_name }}</span></div>{% endif %}
+      {% if pay.note %}<p class="note pre">{{ pay.note }}</p>{% endif %}
+      {% if not qr and not payload and not pay.acc_no %}<p class="note">ร้านยังไม่ได้ตั้งช่องทางรับเงิน กรุณาติดต่อแอดมิน</p>{% endif %}
+    </div>
+  </div>
+  <p class="note">โอนให้ตรงยอด <strong>{{ '{:,}'.format(o.total) }} บาท</strong> แล้วแนบสลิปด้านล่าง</p>
+  {% if o.status == 'pending' %}
+    <p class="note">ออเดอร์นี้เปิดรอชำระถึง <span id="left" data-exp="{{ o.expires }}Z"></span> หลังจากนั้นระบบจะยกเลิกเอง</p>
+  {% else %}
+    <p class="note">ได้รับสลิปแล้ว รอแอดมินตรวจสอบ หน้านี้จะอัปเดตเองเมื่ออนุมัติ</p>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" action="/order/{{ o.id }}/slip?t={{ o.token }}" class="stack">
+    <label>{{ 'ส่งสลิปใหม่' if o.status == 'verifying' else 'แนบสลิปการโอน' }}
+      <input type="file" name="slip" accept="image/jpeg,image/png,image/webp" required></label>
+    <button class="btn">ส่งสลิป</button>
+  </form>
+</section>
+{% elif o.status in ('cancelled', 'expired') %}
+<p class="box">ออเดอร์นี้{{ status_th[o.status] }}แล้ว ถ้าโอนเงินไปแล้วให้ติดต่อแอดมินพร้อมเลขออเดอร์ <strong>{{ o.id }}</strong></p>
+{% endif %}
+<p><a href="/">← กลับหน้าร้าน</a></p>
+{% endblock %}
+{% block scripts %}
+{% if payload %}<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>{% endif %}
+<script>
+(function(){
+  var qr=document.getElementById("qr");
+  if(qr&&window.qrcode){var q=qrcode(0,"M");q.addData(qr.dataset.payload);q.make();qr.src=q.createDataURL(6,8)}
+  var pay=document.getElementById("pay");
+  if(pay){setInterval(function(){
+    fetch("/order/"+pay.dataset.id+"/status?t="+pay.dataset.t).then(function(r){return r.json()}).then(function(j){
+      if(j.status!==pay.dataset.status)location.reload()}).catch(function(){})},10000)}
+  document.querySelectorAll(".copy").forEach(function(b){b.onclick=function(){var t=b.textContent;
+    navigator.clipboard.writeText(b.dataset.v).then(function(){b.textContent="คัดลอกแล้ว"}).catch(function(){b.textContent="คัดลอกไม่ได้"});
+    setTimeout(function(){b.textContent=t},1500)}});
+  var left=document.getElementById("left");
+  if(left){var end=new Date(left.dataset.exp).getTime();
+    (function tick(){var s=Math.max(0,Math.round((end-Date.now())/1000));
+      left.textContent=Math.floor(s/60)+" นาที "+("0"+s%60).slice(-2)+" วินาที";if(s>0)setTimeout(tick,1000);else location.reload()})()}
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{SHOP_TITLE}} — ไฟล์โค้ด JS CSS Python C++</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&family=Kanit:ital,wght@0,400;0,600;1,800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="bar"><div class="wrap">
+  <a class="logo" href="/"><i aria-hidden="true"></i>{{SHOP_BRAND}}</a>
+  <button class="ib" id="cartBtn" aria-label="เปิดตะกร้า">ตะกร้า<b id="cnt">0</b></button>
+</div></div>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <span class="eyebrow">source code store</span>
+      <h1>โค้ดคมๆ<br><em>ยิงตรงเป้า</em></h1>
+      <p>ไฟล์โค้ดพร้อมใช้ JS, CSS, Python, C++ จ่ายด้วย QR โอนเงินแล้วแนบสลิป แอดมินอนุมัติแล้วโหลดได้ทันที</p>
+      <a class="cta" href="#shop">เลือกดูสินค้า <span aria-hidden="true">↓</span></a>
+    </div>
+    <div class="vis" aria-hidden="true">
+      <div class="win">
+        <div class="tb"><s></s><s></s><s></s><span>~/headshot</span></div>
+        <pre id="type"></pre>
+      </div>
+    </div>
+  </section>
+
+  <div class="kpis" id="kpis" hidden>
+    <div class="kpi"><strong id="k1">0</strong><span>สินค้า</span></div>
+    <div class="kpi"><strong id="k2">0</strong><span>ไฟล์</span></div>
+    <div class="kpi"><strong id="k3">0</strong><span>ชุดที่ขายแล้ว</span></div>
+  </div>
+
+  <section id="shop">
+    <div class="search"><input id="q" type="search" placeholder="ค้นหาสินค้า เช่น python, ปุ่ม, template" aria-label="ค้นหาสินค้า"></div>
+    <div class="pills" id="pills" role="group" aria-label="หมวดหมู่"></div>
+    <div class="head"><h2 id="ttl">สินค้าทั้งหมด</h2>
+      <select id="sort" aria-label="เรียงสินค้า"><option value="new">ใหม่สุด</option><option value="lo">ราคาต่ำไปสูง</option><option value="hi">ราคาสูงไปต่ำ</option><option value="hot">ขายดี</option></select>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+</main>
+<footer>{{SHOP_BRAND}} · ชำระด้วย QR · โหลดไฟล์หลังแอดมินตรวจสลิป</footer>
+
+<div class="dock" id="dock"><span id="dockTxt"></span><button class="btn" id="dockBtn">ดูตะกร้า</button></div>
+<dialog id="dlg"><div class="dh"><span id="dt"></span><button id="dx" aria-label="ปิด">×</button></div><div class="db" id="dbody"></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+function ckey(c){return String(c).trim().toUpperCase()}
+var P=[],cart=[],cat="all",$=function(i){return document.getElementById(i)};
+try{cart=JSON.parse(localStorage.getItem("gs_cart2")||"[]")}catch(e){cart=[]}
+function save(){try{localStorage.setItem("gs_cart2",JSON.stringify(cart))}catch(e){}}
+function bt(n){return Number(n).toLocaleString("th-TH")}
+function sz(n){return n<1024?n+" B":n<1048576?(n/1024).toFixed(1)+" KB":(n/1048576).toFixed(1)+" MB"}
+function ext(n){var i=n.lastIndexOf(".");return(i>0?n.slice(i+1):"file").slice(0,5).toLowerCase()}
+function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.h);toast.h=setTimeout(function(){t.classList.remove("on")},2400)}
+function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function find(id){return P.filter(function(p){return p.id===id})[0]}
+function gone(p){return p.left===0}
+function total(){return cart.reduce(function(s,id){var p=find(id);return s+(p?p.price:0)},0)}
+function sync(){
+  $("cnt").textContent=cart.length;
+  $("dock").classList.toggle("on",cart.length>0);
+  $("dockTxt").textContent=cart.length+" รายการ · "+bt(total())+" บาท";
+}
+function clamp(){cart=cart.filter(function(id){var p=find(id);return p&&!gone(p)});save();sync()}
+function kpis(){
+  if(!P.length){$("kpis").hidden=true;return}
+  $("kpis").hidden=false;
+  $("k1").textContent=bt(P.length);
+  $("k2").textContent=bt(P.reduce(function(s,p){return s+p.files.length},0));
+  $("k3").textContent=bt(P.reduce(function(s,p){return s+p.sold},0));
+}
+function load(){
+  return fetch("/api/products").then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){P=d;clamp();kpis();pills();grid()})
+  .catch(function(){$("grid").innerHTML="";$("grid").appendChild(el("p","empty","โหลดสินค้าไม่ได้ ลองรีเฟรชหน้านี้อีกครั้ง"))});
+}
+function cover(p){
+  var c=el("div","cover k-"+p.tone);
+  c.appendChild(el("i","ret"));
+  if(p.tag)c.appendChild(el("span","tg",p.tag));
+  if(p.was)c.appendChild(el("span","off","-"+Math.round((1-p.price/p.was)*100)+"%"));
+  var gl=el("div","gl",p.cat);gl.style.setProperty("--n",Math.max(2,Array.from(p.cat).length));c.appendChild(gl);
+  var seen=[],ex=el("div","exts");
+  p.files.forEach(function(f){var e=ext(f[0]);if(seen.indexOf(e)<0)seen.push(e)});
+  seen.slice(0,4).forEach(function(e){ex.appendChild(el("span","","."+e))});
+  if(seen.length>4)ex.appendChild(el("span","","+"+(seen.length-4)));
+  c.appendChild(ex);
+  return c;
+}
+function priceEl(p){var e=el("span","price",bt(p.price)+" ฿");if(p.was)e.appendChild(el("s","",bt(p.was)));return e}
+function pills(){
+  var b=$("pills");b.innerHTML="";
+  var list=[["all","ทั้งหมด"]],seen={};
+  P.forEach(function(p){var k=ckey(p.cat);if(!seen[k]){seen[k]=1;list.push([k,p.cat])}});
+  if(cat!=="all"&&!seen[cat])cat="all";
+  list.forEach(function(c){
+    var x=el("button","pill",c[1]);x.setAttribute("aria-pressed",cat===c[0]);
+    x.onclick=function(){cat=c[0];$("ttl").textContent=c[0]==="all"?"สินค้าทั้งหมด":c[1];pills();grid()};
+    b.appendChild(x);
+  });
+}
+function grid(){
+  var g=$("grid");g.innerHTML="";
+  var q=$("q").value.trim().toLowerCase(),s=$("sort").value;
+  var list=P.filter(function(p){return(cat==="all"||ckey(p.cat)===cat)&&(!q||(p.name+" "+p.desc+" "+p.tag+" "+p.cat).toLowerCase().indexOf(q)>-1)});
+  if(s==="lo")list.sort(function(a,b){return a.price-b.price});
+  if(s==="hi")list.sort(function(a,b){return b.price-a.price});
+  if(s==="hot")list.sort(function(a,b){return b.sold-a.sold});
+  if(!list.length){g.appendChild(el("p","empty",P.length?"ไม่พบสินค้า ลองพิมพ์คำอื่น หรือเลือกหมวด \"ทั้งหมด\"":"ร้านกำลังเตรียมสินค้า กลับมาใหม่เร็วๆ นี้"));return}
+  list.forEach(function(p){
+    var d=el("article","card");
+    d.appendChild(cover(p));
+    d.appendChild(el("h3","",p.name));
+    var m=el("div","meta");m.appendChild(priceEl(p));
+    m.appendChild(el("span","",p.left!==null?(p.left?"เหลือ "+p.left:"หมดแล้ว"):p.sold?"ขายแล้ว "+p.sold:""));
+    d.appendChild(m);
+    var b=el("button","btn",gone(p)?"สินค้าหมด":"ดูรายละเอียด");b.disabled=gone(p);
+    b.onclick=function(){detail(p)};d.appendChild(b);
+    g.appendChild(d);
+  });
+}
+function detail(p){
+  $("dt").textContent=p.name;var b=$("dbody");b.innerHTML="";
+  b.appendChild(cover(p));
+  var pr=el("div","meta");pr.style.fontSize="16px";pr.appendChild(priceEl(p));
+  pr.appendChild(el("span","note",(p.sold?"ขายแล้ว "+p.sold+" ชุด":"")+(p.left!==null?(p.sold?" · ":"")+"เหลือ "+p.left+" ชุด":"")));
+  b.appendChild(pr);
+  if(p.desc){var d=el("p","",p.desc);d.style.margin="0";d.style.whiteSpace="pre-line";b.appendChild(d)}
+  b.appendChild(el("strong","","ไฟล์ที่คุณจะได้ ("+p.files.length+")"));
+  var fl=el("div","flist");
+  p.files.forEach(function(f){var r=el("div","frow");r.append(el("span","ext",ext(f[0]).toUpperCase()),el("span","nm",f[0]),el("small","",sz(f[1])));fl.appendChild(r)});
+  b.appendChild(fl);
+  if(p.preview){b.appendChild(el("strong","","ตัวอย่างโค้ด"));b.appendChild(el("pre","pv",p.preview))}
+  var inC=cart.indexOf(p.id)>-1;
+  var a=el("button","btn",inC?"อยู่ในตะกร้าแล้ว · ไปชำระเงิน":"ซื้อเลย");
+  a.onclick=function(){if(cart.indexOf(p.id)<0){cart.push(p.id);save();sync()}cartView()};
+  var a2=el("button","btn ghost",inC?"เอาออกจากตะกร้า":"ใส่ตะกร้า");
+  a2.onclick=function(){
+    if(inC)cart=cart.filter(function(i){return i!==p.id});else cart.push(p.id);
+    save();sync();$("dlg").close();toast(inC?"เอาออกแล้ว":"ใส่ตะกร้าแล้ว")};
+  b.append(a,a2);$("dlg").showModal();
+}
+function cartView(){
+  $("dt").textContent="ตะกร้าสินค้า";var b=$("dbody");b.innerHTML="";
+  clamp();
+  if(!cart.length){b.appendChild(el("p","empty","ตะกร้ายังว่าง เลือกสินค้าจากหน้าร้านได้เลย"));if(!$("dlg").open)$("dlg").showModal();return}
+  cart.forEach(function(id){
+    var p=find(id);
+    var r=el("div","line");
+    r.appendChild(el("span","",p.name));
+    var rt=el("span","",bt(p.price)+" ฿ ");
+    var x=el("button","","ลบ");x.setAttribute("aria-label","ลบ "+p.name);
+    x.onclick=function(){cart=cart.filter(function(i){return i!==id});save();sync();cartView()};
+    rt.appendChild(x);r.appendChild(rt);b.appendChild(r);
+  });
+  var t=el("div","tot");t.append(el("span","","รวม"),el("span","",bt(total())+" บาท"));b.appendChild(t);
+  var lb=el("label","","LINE ID, อีเมล หรือเบอร์โทร (ไว้ติดต่อเรื่องออเดอร์)");
+  var inp=el("input");inp.type="text";inp.maxLength=100;inp.autocomplete="off";
+  try{inp.value=localStorage.getItem("gs_contact")||""}catch(e){}
+  lb.appendChild(inp);b.appendChild(lb);
+  var go=el("button","btn","สั่งซื้อและไปหน้าชำระเงิน");
+  go.onclick=function(){
+    var c=inp.value.trim();if(c.length<3){toast("กรอกช่องทางติดต่อก่อน");inp.focus();return}
+    go.disabled=true;go.textContent="กำลังสร้างออเดอร์...";
+    try{localStorage.setItem("gs_contact",c)}catch(e){}
+    fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contact:c,items:cart})})
+    .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})
+    .then(function(x){
+      if(!x.ok){toast(x.j.error||"สั่งซื้อไม่สำเร็จ");go.disabled=false;go.textContent="สั่งซื้อและไปหน้าชำระเงิน";load();return}
+      cart=[];save();sync();location.href=x.j.url;
+    }).catch(function(){toast("เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง");go.disabled=false;go.textContent="สั่งซื้อและไปหน้าชำระเงิน"});
+  };
+  b.appendChild(go);
+  b.appendChild(el("p","note","หลังสั่งซื้อจะได้หน้าออเดอร์ มี QR เลขบัญชี และช่องแนบสลิป"));
+  if(!$("dlg").open)$("dlg").showModal();
+}
+$("cartBtn").onclick=cartView;$("dockBtn").onclick=cartView;
+$("dx").onclick=function(){$("dlg").close()};
+$("dlg").addEventListener("click",function(e){if(e.target===this)this.close()});
+$("q").addEventListener("input",grid);$("sort").addEventListener("change",grid);
+
+var lines=["<span class='q'>$</span> headshot --buy","<span class='c'>> lang</span>     <span class='s'>js | css | py | cpp</span>","<span class='c'>> files</span>    <span class='k'>any</span>","<span class='c'>> pay</span>      <span class='s'>promptpay</span>","<span class='c'>> delivery</span> <span class='s'>instant</span>","","<span class='g'>[ok]</span> one shot. one file."];
+var typed=$("type"),li=0;
+if(matchMedia("(prefers-reduced-motion:reduce)").matches){typed.innerHTML=lines.join("\n")}
+else{(function step(){typed.innerHTML=lines.slice(0,li).join("\n")+(li?"\n":"")+"<span class='caret'></span>";if(li<lines.length){li++;setTimeout(step,430)}})()}
+pills();sync();load();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}หลังบ้าน · {{ shop }}{% endblock %}
+{% block nav %}<form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="ib">ออกจากระบบ</button></form>{% endblock %}
+{% block body %}
+<h1 class="h1">หลังบ้าน</h1>
+<div class="stats">
+  <div class="box"><small>รอตรวจสลิป</small><strong>{{ counts.get('verifying', 0) }}</strong></div>
+  <div class="box"><small>รอชำระเงิน</small><strong>{{ counts.get('pending', 0) }}</strong></div>
+  <div class="box"><small>ชำระแล้ว</small><strong>{{ counts.get('paid', 0) }}</strong></div>
+  <div class="box"><small>รายได้รวม (บาท)</small><strong>{{ '{:,}'.format(revenue) }}</strong></div>
+</div>
+
+<h2 class="h2" id="orders">ออเดอร์</h2>
+<div class="pills">
+  <a class="pill" aria-pressed="{{ 'true' if not cur else 'false' }}" href="/admin">ทั้งหมด</a>
+  {% for k, v in status_th.items() %}<a class="pill" aria-pressed="{{ 'true' if cur == k else 'false' }}" href="/admin?status={{ k }}">{{ v }}</a>{% endfor %}
+</div>
+<div class="scroll"><table>
+  <tr><th>เลขที่</th><th>เวลา (UTC)</th><th>ติดต่อ</th><th>สินค้า</th><th class="num">ยอด</th><th>สถานะ</th><th></th></tr>
+  {% for o, items in orders %}
+  <tr>
+    <td>{{ o.id }}</td><td>{{ o.created.replace('T', ' ') }}</td><td>{{ o.contact }}</td><td>{{ items }}</td>
+    <td class="num">{{ '{:,}'.format(o.total) }}</td><td><span class="st st-{{ o.status }}">{{ status_th[o.status] }}</span></td>
+    <td class="acts">
+      {% if o.slip %}<a href="/admin/slip/{{ o.id }}" target="_blank" rel="noopener">ดูสลิป</a>{% endif %}
+      {% if o.status in ('pending', 'verifying') %}
+      <form method="post" action="/admin/order/{{ o.id }}/approve"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">อนุมัติ</button></form>
+      <form method="post" action="/admin/order/{{ o.id }}/cancel" onsubmit="return confirm('ยกเลิกออเดอร์ {{ o.id }} ?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">ยกเลิก</button></form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="note" style="text-align:center;padding:24px">ยังไม่มีออเดอร์</td></tr>{% endfor %}
+</table></div>
+
+<h2 class="h2" id="payment">ช่องทางรับเงิน</h2>
+<form method="post" action="/admin/payment" enctype="multipart/form-data" class="box stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="payrow">
+    {% if qr %}<img class="qr" src="/pay/qr?v={{ qr }}" alt="QR ปัจจุบัน" width="160" height="160" style="width:160px;height:160px">{% endif %}
+    <div class="stack" style="flex:1;min-width:220px">
+      <label>อัปโหลดรูป QR รับเงิน (JPG, PNG, WEBP ไม่เกิน 6MB){% if qr %} · เลือกไฟล์ใหม่เพื่อเปลี่ยน{% endif %}<input type="file" name="qr" accept="image/jpeg,image/png,image/webp"></label>
+      {% if qr %}<label class="chk"><input type="checkbox" name="remove_qr"> ลบรูป QR ปัจจุบัน</label>{% endif %}
+    </div>
+  </div>
+  <div class="fgrid">
+    <label>ธนาคาร / ช่องทาง<input name="bank" maxlength="60" value="{{ pay.get('bank', '') }}" placeholder="เช่น กสิกรไทย, TrueMoney Wallet"></label>
+    <label>เลขบัญชี / เบอร์<input name="acc_no" maxlength="40" value="{{ pay.get('acc_no', '') }}" placeholder="เช่น 123-4-56789-0"></label>
+    <label>ชื่อบัญชี<input name="acc_name" maxlength="80" value="{{ pay.get('acc_name', '') }}"></label>
+  </div>
+  <label>หมายเหตุถึงลูกค้า (ไม่บังคับ)<textarea name="note" rows="2" maxlength="400">{{ pay.get('note', '') }}</textarea></label>
+  <p class="note">รูป QR และข้อมูลนี้จะแสดงในหน้าออเดอร์ของลูกค้าทุกคน QR ที่อัปโหลดมักไม่ได้ใส่ยอดเงินมาให้ ระบบจึงแสดงยอดที่ต้องโอนตัวใหญ่ข้างๆ และตอนอนุมัติให้เทียบยอดในสลิปกับยอดออเดอร์ทุกครั้ง{% if not qr %} ถ้ายังไม่อัปโหลด QR ระบบจะใช้ QR พร้อมเพย์ที่สร้างจาก PROMPTPAY_ID แทน (ถ้าตั้งไว้){% endif %}</p>
+  <button class="btn sm">บันทึก</button>
+</form>
+
+<datalist id="catlist">{% for c in cat_suggest %}<option value="{{ c }}">{% endfor %}</datalist>
+<h2 class="h2" id="products">สินค้าและไฟล์</h2>
+{% for p, files, sold in products %}
+<div class="box">
+  <form method="post" action="/admin/product" enctype="multipart/form-data" class="pform">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ p.id }}">
+    <p class="note">#{{ p.id }} · ขายแล้ว {{ sold }} ชุด{% if not files %} · <strong style="color:#ff8a80">ยังไม่มีไฟล์ จะไม่แสดงหน้าร้าน</strong>{% endif %}</p>
+    {% include "_pfields.html" %}
+    <button class="btn sm">บันทึก</button>
+  </form>
+  {% if files %}<div class="flist" style="margin-top:12px">
+    {% for f in files %}
+    <div class="frow"><span class="ext">{{ (f.name.rsplit('.', 1)[-1] if '.' in f.name else 'file')[:5]|upper }}</span>
+      <span class="nm">{{ f.name }}</span><small>{{ f.size|fsize }}</small>
+      <a class="btn sm ghost" href="/admin/file/{{ f.id }}" style="text-decoration:none">โหลด</a>
+      <form method="post" action="/admin/file/{{ f.id }}/delete" onsubmit="return confirm('ลบไฟล์ {{ f.name }} ?')" style="margin:0">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">ลบ</button></form></div>
+    {% endfor %}
+  </div>{% endif %}
+</div>
+{% endfor %}
+<h3 class="h2">เพิ่มสินค้าใหม่</h3>
+<form method="post" action="/admin/product" enctype="multipart/form-data" class="box pform">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% set p = blank %}
+  {% include "_pfields.html" %}
+  <button class="btn sm">เพิ่มสินค้า</button>
+</form>
+{% endblock %}

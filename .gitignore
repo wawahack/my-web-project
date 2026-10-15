@@ -1,0 +1,6 @@
+shop.db*
+uploads/
+.secret_key
+__pycache__/
+.env
+__pycache__/
